@@ -33,15 +33,15 @@ int main(int argc, char *argv[])
 	fseek(textp, 0, SEEK_END);
 	int lengthOfText = ftell(textp);
 
-	char *textFileContents;
+	char *content;
 	char *hash;
 	fseek(textp, 0, SEEK_SET);
-	textFileContents = malloc(lengthOfText);
-	fread(textFileContents, 1, lengthOfText, textp);
-	printf("lengthOfText = %d\n", lengthOfText);	
+	content = malloc(lengthOfText);
+	fread(content, 1, lengthOfText, textp);
+	//printf("lengthOfText = %d\n", lengthOfText);	
 
-	hash = buildMerkelTree(textFileContents);
-
+	hash = buildMerkelTree(content);
+	printf("hash: %ld\n", (long) hash);
 	return 0;	
 }
 
@@ -52,51 +52,37 @@ int main(int argc, char *argv[])
 */
 
 
-char* buildMerkelTree(char *textFileContents){
-	sha256 pointer;
-	shs256_init(&pointer);
-	int lengthOfText = strlen(textFileContents);
-	int midpoint = lengthOfText/2;
-	printf("midpoint %d\n", midpoint);
-	char *hash;
-	hash = malloc(sizeof(32));
+char* buildMerkelTree(char *content){
+	sha256 sh;
+	shs256_init(&sh);
+	int lengthOfText = strlen(content);
+	char* hash;
+	hash = malloc(32);
 	int i;
-
-	if(lengthOfText > 256){ // Should we break into multiple leafs
-		char *array1, *array2, *hash1, *hash2, *concatHash;
-		array1 = malloc(midpoint);
-		array2 = malloc(midpoint);
-		memcpy(array1, textFileContents, midpoint);
-		memcpy(array2, textFileContents + midpoint - 1, midpoint);
-		printf("array1: %d\n", strlen(array1));
-		printf("array2: %d\n", strlen(array2));		
-		// recursivly call function twice for right and left half
-		hash1 = buildMerkelTree(array1);
-		hash2 = buildMerkelTree(array2);
-		printf("returned second hash\n");
-		// process both and hash them 	
+	if(lengthOfText > 256){
+		//split array into two seperate arrays
+		int midpoint = lengthOfText/2;
+		char *arr1, *arr2, *h1, *h2;
+		arr1 = malloc(midpoint);
+		arr2 = malloc(lengthOfText - midpoint); // to account for integer math
+		memcpy(arr1, content, midpoint);
+		memcpy(arr2, content + midpoint - 1, lengthOfText - midpoint);
+		//call the merkel tree function recursivly
+		h1 = buildMerkelTree(arr1);
+		h2 = buildMerkelTree(arr2);
+		//concatinate the two
 		for(i = 0; i < 32; i++){
-			shs256_process(&pointer, hash1[i]);
+			shs256_process(&sh, &h1[i]);
+			shs256_process(&sh, &h2[i]);
 		}
-		for(i = 0; i < 32; i++){
-			shs256_process(&pointer, hash2[i]);
+		//hash and return
+		shs256_hash(&sh, &hash);
+	}else{
+		for(i = 0; i < lengthOfText; i++){
+			shs256_process(&sh, content[i]);
 		}
-		printf("hash result for 1 = %s\n", hash1);
-		printf("hash result for 2 = %s\n", hash2);		
-
-		shs256_hash(&pointer, &hash);
-	}else{ // We are at the bottom
-		int padding = 256 - lengthOfText;
-		for(i = 0; i < lengthOfText - 1; i++){
-			shs256_process(&pointer, textFileContents[i]);
-		}
-		//for(i = 0; i < padding; i++){
-		//	shs256_process(&pointer, '0');
-		//}
-		//hash here	
-		shs256_hash(&pointer, &hash);
+		shs256_hash(&sh, &hash);
 	}
-	//return hash string
-	printf("%d\n", hash);
 	return hash;
 }
+
