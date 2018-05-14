@@ -1,22 +1,28 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
 #include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netdb.h> 
-//#include <mirdef.h> 
-//#include <miracl.h>
-//#include <libmiracl.a>
+#include <sys/time.h>
+#include <time.h>
+#include <math.h>
 #include "miracl.h"
-
 
 //NOTE, compile with: gcc client.c -I ~/Libraries/MIRACL ~/Libraries/MIRACL/miracl.a -o client
 
+/* STRUCTS */
+struct key{
+	int k;
+	int t;
+	char **substring;
+};
+
+typedef struct key key;
+
+/* DECLARATIONS */
 void error(const char *msg) { perror(msg); exit(0); } // Error function used for reporting issues
 char* buildMerkelTree(char *);
-
+void HorsKeygen(int, int, int, key *, key *);
+void HorsSign(key *, char *);
 
 int main(int argc, char *argv[])
 {
@@ -28,6 +34,8 @@ int main(int argc, char *argv[])
 		error("Plain text file not found");
 		exit(1);
 	}
+	miracl *mip=mirsys(100,0);	
+	srand(time(0));
 	//argv[2] needs to be the key
 	//key > plain text
 	fseek(textp, 0, SEEK_END);
@@ -38,19 +46,72 @@ int main(int argc, char *argv[])
 	fseek(textp, 0, SEEK_SET);
 	content = malloc(lengthOfText);
 	fread(content, 1, lengthOfText, textp);
-	//printf("lengthOfText = %d\n", lengthOfText);	
 
-	hash = buildMerkelTree(content);
-	printf("hash: %ld\n", (long) hash);
-	return 0;	
+	struct key PK, SK;
+	HorsKeygen(32, 32, 32, &PK, &SK);
+	HorsSign(&SK, content);
 }
 
 /*
-* Name:  buildMerkelTree
-* Input: char* array
-* Goal:  breaks file into merkel tree using 256 bit leafs
+* Name:  HorsKeygen
+* Input: length of substrings, 
+* Goal:  t = numb of substrings, l is length, k is length of signitures 
+		 PK and SK key pointers
 */
 
+void HorsKeygen(int l, int k, int t, key *PK, key *SK){
+	/*csprng rng;            //  |
+	char *seed = "seed";     //  |
+	mr_unsign32 tod;         //  |
+	time(&tod); //Needs better time and seed to be truely random
+	strong_init(&rng, 4, seed, tod);*/
+	sha256 sh;
+	shs256_init(&sh);	
+	int i, j, r;
+	SK->k = k;
+	SK->t = t;
+	PK->k = k;
+	SK->substring = malloc(t*sizeof(char*));
+	PK->substring = malloc(t*sizeof(char*));
+	for(i = 0; i < t; i++){
+		SK->substring[i] = malloc(l);
+		PK->substring[i] = malloc(32); // to store hash return
+		for(j = 0; j < l; j++){
+			//r = strong_rng(&rng);
+			r = rand(); 
+			SK->substring[i][j] = r; 
+			if(i == 0 && j == 0){
+			}
+			shs256_process(&sh, r);
+		}
+		shs256_hash(&sh, PK->substring[i]);
+	}
+}
+
+/*
+* Name:  HorsSign
+* Input: Takes a secret key (SK generated with HorsKeygen) 
+*        and a message (char * array)
+* Goal:  This function will sign 
+*/ 
+
+void HorsSign(key *SK, char *message){
+	//miracl *mip=mirsys(100,0);
+	char* hash;
+	big bt;
+	bt = mirvar(SK->t);
+	hash = buildMerkelTree(message);
+	int slice;
+	slice = logb2(bt);
+	printf("%d value of logb2 of t\n", slice);
+}
+
+
+/*
+* Name:  buildMerkelTree
+* Input: char* array (content you want to be hashed)
+* Goal:  breaks file into merkel tree using 256 bit leafs
+*/
 
 char* buildMerkelTree(char *content){
 	sha256 sh;
