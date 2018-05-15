@@ -16,13 +16,21 @@ struct key{
 	char **substring;
 };
 
+struct sig{
+	char **substring;
+	int *pointers;
+};
+
+typedef struct sig sig;
 typedef struct key key;
 
 /* DECLARATIONS */
 void error(const char *msg) { perror(msg); exit(0); } // Error function used for reporting issues
 char* buildMerkelTree(char *);
 void HorsKeygen(int, int, int, key *, key *);
-void HorsSign(key *, char *);
+sig* HorsSign(key *, char *);
+void HorsVer(key *, char *, sig *);
+int exponentFunc(int, int);
 
 int main(int argc, char *argv[])
 {
@@ -34,7 +42,7 @@ int main(int argc, char *argv[])
 		error("Plain text file not found");
 		exit(1);
 	}
-	miracl *mip=mirsys(100,0);	
+	miracl *mip=mirsys(32,0);	
 	srand(time(0));
 	//argv[2] needs to be the key
 	//key > plain text
@@ -48,8 +56,12 @@ int main(int argc, char *argv[])
 	fread(content, 1, lengthOfText, textp);
 
 	struct key PK, SK;
-	HorsKeygen(32, 32, 32, &PK, &SK);
-	HorsSign(&SK, content);
+	struct sig *THETA;
+	HorsKeygen(80, 16, 1024, &PK, &SK);
+	THETA = HorsSign(&SK, content);
+	HorsVer(&PK, content, THETA);
+
+
 }
 
 /*
@@ -60,16 +72,12 @@ int main(int argc, char *argv[])
 */
 
 void HorsKeygen(int l, int k, int t, key *PK, key *SK){
-	/*csprng rng;            //  |
-	char *seed = "seed";     //  |
-	mr_unsign32 tod;         //  |
-	time(&tod); //Needs better time and seed to be truely random
-	strong_init(&rng, 4, seed, tod);*/
 	sha256 sh;
 	shs256_init(&sh);	
 	int i, j, r;
 	SK->k = k;
 	SK->t = t;
+	PK->t = t;
 	PK->k = k;
 	SK->substring = malloc(t*sizeof(char*));
 	PK->substring = malloc(t*sizeof(char*));
@@ -77,7 +85,6 @@ void HorsKeygen(int l, int k, int t, key *PK, key *SK){
 		SK->substring[i] = malloc(l);
 		PK->substring[i] = malloc(32); // to store hash return
 		for(j = 0; j < l; j++){
-			//r = strong_rng(&rng);
 			r = rand(); 
 			SK->substring[i][j] = r; 
 			if(i == 0 && j == 0){
@@ -85,6 +92,7 @@ void HorsKeygen(int l, int k, int t, key *PK, key *SK){
 			shs256_process(&sh, r);
 		}
 		shs256_hash(&sh, PK->substring[i]);
+		//printf("PK at %d: %s\n", i, PK->substring[i]);
 	}
 }
 
@@ -95,15 +103,73 @@ void HorsKeygen(int l, int k, int t, key *PK, key *SK){
 * Goal:  This function will sign 
 */ 
 
-void HorsSign(key *SK, char *message){
-	//miracl *mip=mirsys(100,0);
+sig* HorsSign(key *SK, char *message){
+	sig* THETA;
+	THETA = malloc(sizeof(sig));
+	THETA->pointers = malloc(sizeof(int) * SK->k);
+	THETA->substring = malloc(sizeof(char*) * SK->k);
 	char* hash;
 	big bt;
 	bt = mirvar(SK->t);
 	hash = buildMerkelTree(message);
-	int slice;
+	int slice, i, base, j;
 	slice = logb2(bt);
-	printf("%d value of logb2 of t\n", slice);
+	slice--;
+	base = exponentFunc(1, slice);
+	//Bitwise shifiting to get pointers
+	for (i = 0; i < SK->k; ++i)
+	{
+		j = ((long) hash >> (slice * i)) & base;
+		THETA->pointers[i] = j;
+		printf("value of j %d\n", THETA->pointers[i]);
+	}
+	//Getting values from secret key that match the pointer location
+	for(i = 0; i < SK->k; i++){
+		THETA->substring[i] = SK->substring[THETA->pointers[i]]; 
+		printf("%d == %d\n", THETA->substring[i], SK->substring[THETA->pointers[i]]);		
+	}
+
+
+	return THETA;
+}
+
+void HorsVer(key *PK, char *message, sig *THETA){
+	char* hash;
+	big bt, val1, val2;
+	bt = mirvar(PK->t);
+	hash = buildMerkelTree(message);
+	int slice, i, base, j;
+	int *pointers;
+	slice = logb2(bt);
+	slice--;
+	base = exponentFunc(1, slice);
+	//Bitwise shifting
+	pointers = malloc(sizeof(int) * PK->k);
+	for (i = 0; i < PK->k; i++)
+	{
+		j = ((long) hash >> (slice * i)) & base;
+		pointers[i] = j;
+	}
+	//Verification Step
+	int verified = 1;
+	printf("about to do some comparisions\n");
+	for(i = 0; i < PK->k; i++){
+		j = pointers[i];
+		bytes_to_big(32, THETA->substring[i], val1); 		
+		bytes_to_big(32, PK->substring[j], val2); //Val 2 is vsubisubj	
+	}/*
+       //Val 1 is f(s(prime)subj)
+
+		if(mr_compare(val1, val2) != 0){
+			printf("MISSED\n");
+			verified = 0;
+		}
+	}
+	if(verified == 1){
+		printf("The message is verified\n");
+	}else{
+		printf("The message was NOT verified\n");
+	}*/
 }
 
 
@@ -147,3 +213,10 @@ char* buildMerkelTree(char *content){
 	return hash;
 }
 
+int exponentFunc(int prev, int num){ //Always put one as prev on base
+	if(num != 1){
+		return (prev + exponentFunc((prev * 2), num - 1));
+	}else{
+		return prev;
+	}
+}
