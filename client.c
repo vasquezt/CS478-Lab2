@@ -13,6 +13,7 @@
 struct key{
 	int k;
 	int t;
+	int l;
 	char **substring;
 };
 
@@ -42,7 +43,7 @@ int main(int argc, char *argv[])
 		error("Plain text file not found");
 		exit(1);
 	}
-	miracl *mip=mirsys(32,0);	
+	miracl *mip = mirsys(100, 10);	
 	srand(time(0));
 	//argv[2] needs to be the key
 	//key > plain text
@@ -56,10 +57,10 @@ int main(int argc, char *argv[])
 	fread(content, 1, lengthOfText, textp);
 
 	struct key PK, SK;
-	struct sig *THETA;
+	struct sig *theta;
 	HorsKeygen(80, 16, 1024, &PK, &SK);
-	THETA = HorsSign(&SK, content);
-	HorsVer(&PK, content, THETA);
+	theta = HorsSign(&SK, content);
+	HorsVer(&PK, content, theta);
 
 
 }
@@ -72,23 +73,24 @@ int main(int argc, char *argv[])
 */
 
 void HorsKeygen(int l, int k, int t, key *PK, key *SK){
+	//get input, declare variables
 	sha256 sh;
 	shs256_init(&sh);	
-	int i, j, r;
-	SK->k = k;
-	SK->t = t;
-	PK->t = t;
-	PK->k = k;
+	int i, j, r, lbits;
+	SK->k = k; SK->t = t; SK->l = l;
+	PK->k = k; PK->t = t; PK->l = l;
 	SK->substring = malloc(t*sizeof(char*));
 	PK->substring = malloc(t*sizeof(char*));
+	lbits = l/8; //CONVERTED BYTES TO BITS
+	//for each array, malloc either space for a hash or l bytes;
 	for(i = 0; i < t; i++){
-		SK->substring[i] = malloc(l);
-		PK->substring[i] = malloc(32); // to store hash return
-		for(j = 0; j < l; j++){
+		SK->substring[i] = malloc(lbits); 
+		PK->substring[i] = malloc(32);
+		//Generate values for SK byte by byte
+		//With those bytes, seed one way function for PK
+		for(j = 0; j < lbits; j++){
 			r = rand(); 
 			SK->substring[i][j] = r; 
-			if(i == 0 && j == 0){
-			}
 			shs256_process(&sh, r);
 		}
 		shs256_hash(&sh, PK->substring[i]);
@@ -104,14 +106,16 @@ void HorsKeygen(int l, int k, int t, key *PK, key *SK){
 */ 
 
 sig* HorsSign(key *SK, char *message){
-	sig* THETA;
-	THETA = malloc(sizeof(sig));
-	THETA->pointers = malloc(sizeof(int) * SK->k);
-	THETA->substring = malloc(sizeof(char*) * SK->k);
+	sig* theta;
+	theta = malloc(sizeof(sig));
+	theta->pointers = malloc(sizeof(int) * SK->k);
+	theta->substring = malloc(sizeof(char*) * SK->k);
 	char* hash;
 	big bt;
 	bt = mirvar(SK->t);
+	//Use the merkel hash return as our 32 byte hash value;
 	hash = buildMerkelTree(message);
+	//Do math for bitwise operations
 	int slice, i, base, j;
 	slice = logb2(bt);
 	slice--;
@@ -119,21 +123,21 @@ sig* HorsSign(key *SK, char *message){
 	//Bitwise shifiting to get pointers
 	for (i = 0; i < SK->k; ++i)
 	{
-		j = ((long) hash >> (slice * i)) & base;
-		THETA->pointers[i] = j;
-		printf("value of j %d\n", THETA->pointers[i]);
+		j = ((int) hash >> (slice * i)) & base; //NOT SURE IF THIS IS CORRECT INT IS WEIRD
+		theta->pointers[i] = j;
+		printf("1 value of %d, %d\n", i, j);		
 	}
 	//Getting values from secret key that match the pointer location
 	for(i = 0; i < SK->k; i++){
-		THETA->substring[i] = SK->substring[THETA->pointers[i]]; 
-		printf("%d == %d\n", THETA->substring[i], SK->substring[THETA->pointers[i]]);		
+		theta->substring[i] = SK->substring[theta->pointers[i]]; 
+		printf("%d == %d\n", theta->substring[i], SK->substring[theta->pointers[i]]);		
 	}
 
 
-	return THETA;
+	return theta;
 }
 
-void HorsVer(key *PK, char *message, sig *THETA){
+void HorsVer(key *PK, char *message, sig *theta){
 	char* hash;
 	big bt, val1, val2;
 	bt = mirvar(PK->t);
@@ -145,17 +149,19 @@ void HorsVer(key *PK, char *message, sig *THETA){
 	base = exponentFunc(1, slice);
 	//Bitwise shifting
 	pointers = malloc(sizeof(int) * PK->k);
-	for (i = 0; i < PK->k; i++)
+	for (i = 0; i < PK->k; ++i)
 	{
-		j = ((long) hash >> (slice * i)) & base;
+		j = ((int) hash >> (slice * i)) & base; //NOT SURE IF CORRECT
 		pointers[i] = j;
+		printf("2 value of %d, %d\n", i, j);
 	}
 	//Verification Step
 	int verified = 1;
 	printf("about to do some comparisions\n");
+	printf("%d == %d", theta->substring[0], PK->substring[pointers[0]]);
 	for(i = 0; i < PK->k; i++){
 		j = pointers[i];
-		bytes_to_big(32, THETA->substring[i], val1); 		
+		bytes_to_big(32, theta->substring[i], val1); 		
 		bytes_to_big(32, PK->substring[j], val2); //Val 2 is vsubisubj	
 	}/*
        //Val 1 is f(s(prime)subj)
