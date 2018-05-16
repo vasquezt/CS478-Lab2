@@ -31,6 +31,9 @@ char* buildMerkelTree(char *);
 void HorsKeygen(int, int, int, key *, key *);
 sig* HorsSign(key *, char *);
 void HorsVer(key *, char *, sig *);
+void DtimeHorsKeygen(int, int, int, key *, key *);
+sig* DtimeHorsSign(key *, char *);
+void DtimeHorsVer(key *, char *, sig *);
 int exponentFunc(int, int);
 
 int main(int argc, char *argv[])
@@ -56,6 +59,9 @@ int main(int argc, char *argv[])
 	content = malloc(lengthOfText);
 	fread(content, 1, lengthOfText, textp);
 
+	buildMerkelTree(content);
+
+
 	struct key PK, SK;
 	struct sig *theta;
 	HorsKeygen(80, 16, 1024, &PK, &SK);
@@ -64,6 +70,61 @@ int main(int argc, char *argv[])
 
 
 }
+
+/*
+* Name:  DtimeHorsKeygen
+* Input: length of substrings, 
+* Goal:  t = numb of substrings, l is length, k is length of signitures 
+		 PK and SK key pointers
+*/
+
+void DtimeHorsKeygen(int l, int k, int t, key *PK, key *SK){
+	//get input, declare variables
+	sha256 sh;
+	shs256_init(&sh);	
+	int i, j, r, lbits;
+	SK->k = k; SK->t = t; SK->l = l;
+	PK->k = k; PK->t = t; PK->l = l;
+	SK->substring = malloc(t*sizeof(char*));
+	PK->substring = malloc(t*sizeof(char*));
+	lbits = l/8; //CONVERTED BYTES TO BITS
+}
+
+/*
+* Name:  DtimeHorsSign
+* Input: Takes a secret key (SK generated with HorsKeygen) 
+*        and a message (char * array)
+* Goal:  This function will sign with SK and the message
+*/ 
+
+sig* DtimeHorsSign(key *SK, char *message){
+	sig* theta;
+	theta = malloc(sizeof(sig));
+	theta->pointers = malloc(sizeof(int) * SK->k);
+	theta->substring = malloc(sizeof(char*) * SK->k);
+	char* hash;
+	big bt;
+	bt = mirvar(SK->t);
+
+}
+
+/*
+* Name:  DtimeHorsSign
+* Input: Takes a secret key (SK generated with HorsKeygen) 
+*        and a message (char * array)
+* Goal:  This function will Verify the signiture for the message with PK 
+*/ 
+
+void DtimeHorsVer(key *PK, char *message, sig *theta){
+	char* hash;
+	big bt, val1, val2;
+	bt = mirvar(PK->t);
+
+}
+
+
+
+
 
 /*
 * Name:  HorsKeygen
@@ -85,7 +146,7 @@ void HorsKeygen(int l, int k, int t, key *PK, key *SK){
 	//for each array, malloc either space for a hash or l bytes;
 	for(i = 0; i < t; i++){
 		SK->substring[i] = malloc(lbits); 
-		PK->substring[i] = malloc(32);
+		PK->substring[i] = malloc(32 * sizeof(char));
 		//Generate values for SK byte by byte
 		//With those bytes, seed one way function for PK
 		for(j = 0; j < lbits; j++){
@@ -123,7 +184,7 @@ sig* HorsSign(key *SK, char *message){
 	//Bitwise shifiting to get pointers
 	for (i = 0; i < SK->k; ++i)
 	{
-		j = ((int) hash >> (slice * i)) & base; //NOT SURE IF THIS IS CORRECT INT IS WEIRD
+		j = ((int) hash >> (slice * i)) & base; //NEED NEW WAY TO CUT UP FOR CHAR *
 		theta->pointers[i] = j;
 		printf("1 value of %d, %d\n", i, j);		
 	}
@@ -132,7 +193,6 @@ sig* HorsSign(key *SK, char *message){
 		theta->substring[i] = SK->substring[theta->pointers[i]]; 
 		printf("%d == %d\n", theta->substring[i], SK->substring[theta->pointers[i]]);		
 	}
-
 
 	return theta;
 }
@@ -151,7 +211,7 @@ void HorsVer(key *PK, char *message, sig *theta){
 	pointers = malloc(sizeof(int) * PK->k);
 	for (i = 0; i < PK->k; ++i)
 	{
-		j = ((int) hash >> (slice * i)) & base; //NOT SURE IF CORRECT
+		j = ((int) hash >> (slice * i)) & base; //NEED NEW WAY TO CUT UP FOR CHAR *
 		pointers[i] = j;
 		printf("2 value of %d, %d\n", i, j);
 	}
@@ -190,7 +250,7 @@ char* buildMerkelTree(char *content){
 	shs256_init(&sh);
 	int lengthOfText = strlen(content);
 	char* hash;
-	hash = malloc(32);
+	hash = malloc(32 * sizeof(char));
 	int i;
 	if(lengthOfText > 256){
 		//split array into two seperate arrays
@@ -205,17 +265,21 @@ char* buildMerkelTree(char *content){
 		h2 = buildMerkelTree(arr2);
 		//concatinate the two
 		for(i = 0; i < 32; i++){
-			shs256_process(&sh, &h1[i]);
-			shs256_process(&sh, &h2[i]);
+			shs256_process(&sh, h1[i]);
+			shs256_process(&sh, h2[i]);
 		}
 		//hash and return
-		shs256_hash(&sh, &hash);
 	}else{
 		for(i = 0; i < lengthOfText; i++){
 			shs256_process(&sh, content[i]);
 		}
-		shs256_hash(&sh, &hash);
 	}
+	shs256_hash(&sh, hash);	
+	/*Print the hash value
+	big bt;
+	bytes_to_big(32, hash, bt);
+	cotnum(bt, stdout);
+	*/
 	return hash;
 }
 
