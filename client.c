@@ -122,10 +122,6 @@ void DtimeHorsVer(key *PK, char *message, sig *theta){
 
 }
 
-
-
-
-
 /*
 * Name:  HorsKeygen
 * Input: length of substrings, 
@@ -200,7 +196,10 @@ sig* HorsSign(key *SK, char *message){
 void HorsVer(key *PK, char *message, sig *theta){
 	char* hash;
 	big bt, val1, val2;
+
 	bt = mirvar(PK->t);
+	val1 = mirvar(0);
+	val2 = mirvar(0);
 	hash = buildMerkelTree(message);
 	int slice, i, base, j;
 	int *pointers;
@@ -218,16 +217,20 @@ void HorsVer(key *PK, char *message, sig *theta){
 	//Verification Step
 	int verified = 1;
 	printf("about to do some comparisions\n");
-	printf("%d == %d", theta->substring[0], PK->substring[pointers[0]]);
+	//printf("%d == %d", theta->substring[0], PK->substring[pointers[0]]);
 	for(i = 0; i < PK->k; i++){
 		j = pointers[i];
-		bytes_to_big(32, theta->substring[i], val1); 		
+		/*
+			INSIDE HERE I NEED TO HASH THETA TO GET PK MATCH
+		*/
+		bytes_to_big(32, theta->substring[i], val1); 			
 		bytes_to_big(32, PK->substring[j], val2); //Val 2 is vsubisubj	
-	}/*
        //Val 1 is f(s(prime)subj)
 
 		if(mr_compare(val1, val2) != 0){
-			printf("MISSED\n");
+			printf("%d MISSED\n", i);
+			cotnum(val1, stdout);		
+			cotnum(val2, stdout);				
 			verified = 0;
 		}
 	}
@@ -235,7 +238,7 @@ void HorsVer(key *PK, char *message, sig *theta){
 		printf("The message is verified\n");
 	}else{
 		printf("The message was NOT verified\n");
-	}*/
+	}
 }
 
 
